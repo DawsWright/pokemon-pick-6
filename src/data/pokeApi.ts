@@ -1,5 +1,4 @@
-
-const API_BASE = "https://pokeapi.co/api/v2";
+import pokemonJson from "./pokemon.json";
 
 export type PokemonStatName =
   | "hp"
@@ -9,9 +8,22 @@ export type PokemonStatName =
   | "special-defense"
   | "speed";
 
+export type PokemonFormType =
+  | "base"
+  | "regional"
+  | "mega"
+  | "primal"
+  | "battle"
+  | "other";
+
 export type PokemonData = {
   id: number;
+  speciesId: number;
   name: string;
+  displayName: string;
+  formName: string | null;
+  isDefaultForm: boolean;
+  formType: PokemonFormType;
   sprite: string;
   types: string[];
   stats: Record<PokemonStatName, number>;
@@ -21,140 +33,10 @@ export type PokemonData = {
   evolutionChainUrl: string | null;
 };
 
-type ApiResource = {
-  name: string;
-  url: string;
-};
-
-type ApiPokemon = {
-  id: number;
-  name: string;
-  sprites: {
-    front_default: string | null;
-  };
-  types: {
-    slot: number;
-    type: ApiResource;
-  }[];
-  stats: {
-    base_stat: number;
-    stat: ApiResource;
-  }[];
-  abilities: {
-    ability: ApiResource;
-    is_hidden: boolean;
-  }[];
-};
-
-type ApiSpecies = {
-  generation: ApiResource;
-  evolution_chain: ApiResource;
-};
-
-const STAT_NAMES: PokemonStatName[] = [
-  "hp",
-  "attack",
-  "defense",
-  "special-attack",
-  "special-defense",
-  "speed",
-];
-
-const REGION_BY_GENERATION: Record<string, string> = {
-  "generation-i": "Kanto",
-  "generation-ii": "Johto",
-  "generation-iii": "Hoenn",
-  "generation-iv": "Sinnoh",
-  "generation-v": "Unova",
-  "generation-vi": "Kalos",
-  "generation-vii": "Alola",
-  "generation-viii": "Galar",
-  "generation-ix": "Paldea",
-};
-
-let pokemonCache: PokemonData[] | null = null;
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`PokéAPI request failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
-async function fetchInBatches<T, R>(
-  items: T[],
-  batchSize: number,
-  fetchItem: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = [];
-
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const batchResults = await Promise.all(batch.map(fetchItem));
-    results.push(...batchResults);
-  }
-
-  return results;
-}
+const pokemonRecords = pokemonJson as PokemonData[];
 
 export async function getPokemonData(): Promise<PokemonData[]> {
-  if (pokemonCache) {
-    return pokemonCache;
-  }
-
-  const pokemonIds = Array.from({ length: 151 }, (_, i) => i + 1);
-
-  const pokemonRecords = await fetchInBatches(
-    pokemonIds,
-    10,
-    async (id) => {
-      const pokemon = await fetchJson<ApiPokemon>(
-        `${API_BASE}/pokemon/${id}`,
-      );
-
-      const species = await fetchJson<ApiSpecies>(
-        `${API_BASE}/pokemon-species/${id}`,
-      );
-
-      const stats = Object.fromEntries(
-        pokemon.stats.map((stat) => [
-          stat.stat.name,
-          stat.base_stat,
-        ]),
-      ) as Record<PokemonStatName, number>;
-
-      const generation = species.generation.name;
-
-      return {
-        id: pokemon.id,
-        name: pokemon.name,
-        sprite:
-          pokemon.sprites.front_default ??
-          `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`,
-        types: pokemon.types
-          .sort((a, b) => a.slot - b.slot)
-          .map((entry) => entry.type.name),
-        stats: Object.fromEntries(
-          STAT_NAMES.map((statName) => [
-            statName,
-            stats[statName],
-          ]),
-        ) as Record<PokemonStatName, number>,
-        abilities: pokemon.abilities.map(
-          (entry) => entry.ability.name,
-        ),
-        generation,
-        region: REGION_BY_GENERATION[generation] ?? "Unknown",
-        evolutionChainUrl: species.evolution_chain?.url ?? null,
-      } satisfies PokemonData;
-    },
-  );
-
-  pokemonCache = pokemonRecords;
-  return pokemonCache;
+  return pokemonRecords;
 }
 
 export function getBaseStatTotal(pokemon: PokemonData): number {

@@ -4,10 +4,8 @@ import TypingAnswer from "./TypingAnswer";
 import RegionAnswer from "./RegionAnswer";
 import {
   getPokemonData,
-  getBaseStatTotal,
   formatPokemonName,
   type PokemonData,
-  type PokemonStatName,
 } from "../data/pokeApi";
 import {
   validateTyping,
@@ -19,6 +17,7 @@ import {
 import EvolutionMethodAnswer, {
   type EvolutionAnswer,
 } from "./EvolutionMethodAnswer";
+import HighestStatAnswer from "./HighestStatAnswer";
 
 
 type Category =
@@ -73,10 +72,20 @@ type EvolutionDetail = {
   trigger: { name: string };
   held_item: { name: string } | null;
   known_move: { name: string } | null;
+  known_move_type: { name: string } | null;
   min_happiness: number | null;
+  min_affection: number | null;
+  min_beauty: number | null;
   time_of_day: string;
   location: { name: string } | null;
   trade_species: { name: string } | null;
+  gender: number | null;
+  relative_physical_stats: number | null;
+  party_species: { name: string } | null;
+  party_type: { name: string } | null;
+  needs_overworld_rain: boolean;
+  turn_upside_down: boolean;
+  region: { name: string } | null;
 };
 
 type EvolutionNode = {
@@ -84,6 +93,19 @@ type EvolutionNode = {
   evolves_to: EvolutionNode[];
   evolution_details: EvolutionDetail[];
 };
+
+type EvolutionTransition = {
+  from: string;
+  to: string;
+  details: EvolutionDetail[];
+};
+
+type EvolutionMethod =
+  | "level-up"
+  | "level-up-condition"
+  | "evolution-item"
+  | "trade"
+  | "misc";
 
 type EvolutionResponse = {
   chain: EvolutionNode;
@@ -94,6 +116,7 @@ type ExtraInfo = {
   resistances?: string[];
   evolutionDescription?: string;
   evolutionMethod?: string;
+  evolutionTransitions?: EvolutionTransition[];
 };
 
 function shuffle<T>(items: T[]): T[] {
@@ -136,18 +159,27 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function collectEvolutionNodes(
-  node: EvolutionNode,
-  result: EvolutionNode[] = [],
-): EvolutionNode[] {
-  result.push(node);
+function collectEvolutionTransitions(
+  root: EvolutionNode,
+): EvolutionTransition[] {
+  const transitions: EvolutionTransition[] = [];
 
-  for (const child of node.evolves_to) {
-    collectEvolutionNodes(child, result);
+  function visit(node: EvolutionNode) {
+    for (const child of node.evolves_to) {
+      transitions.push({
+        from: node.species.name,
+        to: child.species.name,
+        details: child.evolution_details,
+      });
+
+      visit(child);
+    }
   }
 
-  return result;
+  visit(root);
+  return transitions;
 }
+
 
 function describeEvolution(detail: EvolutionDetail): string {
   const trigger = detail.trigger.name;
@@ -193,67 +225,212 @@ function describeEvolution(detail: EvolutionDetail): string {
   return titleCase(trigger.replace(/-/g, " "));
 }
 
-function validateEvolutionAnswer(
-  answer: string,
-  extra: ExtraInfo,
+function normalizeEvolutionValue(value: string | undefined | null): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function validateStructuredEvolutionAnswer(
+  submitted: EvolutionAnswer,
+  transitions: EvolutionTransition[],
+  pokemonName: string,
 ): ValidationResult {
-  const guesses = parseAnswers(answer);
-  const method = normalize(extra.evolutionMethod ?? "");
-  const exact = normalize(extra.evolutionDescription ?? "");
+  const currentName = normalizeEvolutionValue(pokemonName);
 
-  if (!method || !exact) {
-    return {
-      points: 0,
-      message: "This Pokémon has no applicable evolution for this category.",
-      correctAnswer: "Not applicable",
-       
-    };
-  }
-
-  const methodAliases: Record<string, string[]> = {
-    "level-up": ["level up", "level"],
-    "use-item": ["use item", "item"],
-    trade: ["trade", "trading"],
-    "shed": ["shed"],
-    "three-critical-hits": ["critical hits", "three critical hits"],
-    "take-damage": ["take damage", "damage"],
-    "spin": ["spin"],
-    "tower-of-darkness": ["tower of darkness"],
-    "tower-of-waters": ["tower of waters"],
-  };
-
-  const aliases = methodAliases[method] ?? [method.replace(/-/g, " ")];
-  const hasGeneralMethod = guesses.some((guess) =>
-    aliases.some((alias) => guess.includes(normalize(alias))),
+  const relevantTransitions = transitions.filter((transition) =>
+    submitted.direction === "evolves-into"
+      ? normalizeEvolutionValue(transition.from) === currentName
+      : normalizeEvolutionValue(transition.to) === currentName,
   );
 
-  const exactMatch =
-    guesses.some((guess) => guess === exact) ||
-    normalize(answer).includes(exact);
-
-  if (exactMatch) {
+  if (relevantTransitions.length === 0) {
     return {
-      points: 2,
-      message: "Perfect! You identified the exact evolution condition.",
-      correctAnswer: extra.evolutionDescription!,
-       
+      points: 0,
+      message: "This Pokémon has no evolution in that direction.",
+      correctAnswer: "No evolution in that direction",
     };
   }
 
-  if (hasGeneralMethod) {
+  function getMethod(detail: EvolutionDetail): EvolutionMethod {
+    if (detail.trigger.name === "trade") return "trade";
+    if (detail.trigger.name === "use-item") return "evolution-item";
+
+    if (detail.trigger.name === "level-up") {
+      const hasCondition =
+        detail.min_happiness != null ||
+        detail.min_affection != null ||
+        detail.min_beauty != null ||
+        Boolean(detail.known_move) ||
+        Boolean(detail.known_move_type) ||
+        Boolean(detail.time_of_day) ||
+        Boolean(detail.location) ||
+        Boolean(detail.held_item) ||
+        detail.gender != null ||
+        detail.relative_physical_stats != null ||
+        Boolean(detail.party_species) ||
+        Boolean(detail.party_type) ||
+        detail.needs_overworld_rain ||
+        detail.turn_upside_down;
+
+      return hasCondition ? "level-up-condition" : "level-up";
+    }
+
+    return "misc";
+  }
+
+  const possibleDetails = relevantTransitions.flatMap((transition) =>
+    transition.details.map((detail) => ({
+      transition,
+      detail,
+      method: getMethod(detail),
+    })),
+  );
+
+  const matchingMethod = possibleDetails.filter(
+    (entry) => entry.method === submitted.method,
+  );
+
+  if (matchingMethod.length === 0) {
+    const correctMethods = [
+      ...new Set(
+        possibleDetails.map((entry) => {
+          switch (entry.method) {
+            case "level-up":
+              return "Level Up";
+            case "level-up-condition":
+              return "Level Up + Condition";
+            case "evolution-item":
+              return "Evolution Item";
+            case "trade":
+              return "Trade";
+            default:
+              return "Misc";
+          }
+        }),
+      ),
+    ];
+
     return {
-      points: 1,
-      message: "Nice! You identified the general evolution method.",
-      correctAnswer: extra.evolutionDescription!,
-       
+      points: 0,
+      message: "That evolution method does not match.",
+      correctAnswer: correctMethods.join(" or "),
     };
   }
+
+  const matchesConditions = matchingMethod.some(
+    ({ detail, method }) => {
+      if (method === "level-up") {
+        return (
+          submitted.level === detail.min_level &&
+          (detail.gender == null || submitted.gender ===
+            (detail.gender === 1 ? "female" : "male"))
+        );
+      }
+
+      if (method === "evolution-item") {
+        return (
+          normalizeEvolutionValue(submitted.item) ===
+            normalizeEvolutionValue(detail.item?.name) &&
+          (detail.gender == null ||
+            submitted.gender ===
+              (detail.gender === 1 ? "female" : "male"))
+        );
+      }
+
+      if (method === "trade") {
+        const hasHeldItem = Boolean(detail.held_item);
+
+        if (hasHeldItem) {
+          return (
+            submitted.tradeWith === "item" &&
+            normalizeEvolutionValue(submitted.tradeItem) ===
+              normalizeEvolutionValue(detail.held_item?.name)
+          );
+        }
+
+        if (detail.trade_species) {
+          return (
+            submitted.tradeWith === "pokemon" &&
+            normalizeEvolutionValue(submitted.tradePokemon) ===
+              normalizeEvolutionValue(detail.trade_species.name)
+          );
+        }
+
+        return submitted.tradeWith === "nothing";
+      }
+
+      if (method === "level-up-condition") {
+        if (detail.known_move) {
+          return (
+            submitted.conditionType === "knows-move" &&
+            normalizeEvolutionValue(submitted.conditionDetail) ===
+              normalizeEvolutionValue(detail.known_move.name)
+          );
+        }
+
+        if (detail.held_item) {
+          return (
+            submitted.conditionType === "held-item" &&
+            normalizeEvolutionValue(submitted.item) ===
+              normalizeEvolutionValue(detail.held_item.name)
+          );
+        }
+
+        if (detail.time_of_day) {
+          return (
+            submitted.conditionType === "time-of-day" &&
+            normalizeEvolutionValue(submitted.conditionDetail) ===
+              normalizeEvolutionValue(detail.time_of_day)
+          );
+        }
+
+        if (detail.location) {
+          return (
+            submitted.conditionType === "location" &&
+            normalizeEvolutionValue(submitted.conditionDetail) ===
+              normalizeEvolutionValue(detail.location.name)
+          );
+        }
+
+        if (detail.relative_physical_stats != null) {
+          const expected =
+            detail.relative_physical_stats > 0
+              ? "attack-greater"
+              : detail.relative_physical_stats < 0
+                ? "attack-less"
+                : "attack-equal";
+
+          return (
+            submitted.conditionType === "stat-based" &&
+            submitted.conditionDetail === expected
+          );
+        }
+
+        if (detail.min_happiness != null) {
+          return submitted.conditionType === "friendship";
+        }
+
+        return false;
+      }
+
+      return false;
+    },
+  );
+
+  const example = matchingMethod[0];
+  const from = formatPokemonName(example.transition.from);
+  const to = formatPokemonName(example.transition.to);
+
+  const correctDescription =
+    `${from} → ${to}: ${describeEvolution(example.detail)}`;
 
   return {
-    points: 0,
-    message: "That evolution method was not correct.",
-    correctAnswer: extra.evolutionDescription!,
-     
+    points: matchesConditions ? 2 : 1,
+    message: matchesConditions
+      ? "Perfect! You identified the method and its conditions."
+      : "Correct general method, but some conditions do not match.",
+    correctAnswer: correctDescription,
   };
 }
 
@@ -352,96 +529,6 @@ function validateTypeMatch(
   };
 }
 
-function validateWeaknesses(
-  answer: string,
-  extra: ExtraInfo,
-): ValidationResult {
-  const [weaknessPart = "", resistancePart = ""] = answer.split("|");
-
-  const guessedWeaknesses = new Set(
-    weaknessPart
-      .replace(/^weaknesses=/, "")
-      .split(",")
-      .map(normalize)
-      .filter(Boolean),
-  );
-
-  const guessedResistances = new Set(
-    resistancePart
-      .replace(/^resistances=/, "")
-      .split(",")
-      .map(normalize)
-      .filter(Boolean),
-  );
-
-  const weaknesses = (extra.weaknesses ?? []).map(normalize);
-  const resistances = (extra.resistances ?? []).map(normalize);
-
-  const correctWeaknessCount = weaknesses.filter((type) =>
-    guessedWeaknesses.has(type),
-  ).length;
-
-  const correctResistanceCount = resistances.filter((type) =>
-    guessedResistances.has(type),
-  ).length;
-
-  const hasIncorrectWeakness = [...guessedWeaknesses].some(
-    (type) => !weaknesses.includes(type),
-  );
-
-  const hasIncorrectResistance = [...guessedResistances].some(
-    (type) => !resistances.includes(type),
-  );
-
-  const allCorrect =
-    !hasIncorrectWeakness &&
-    !hasIncorrectResistance &&
-    correctWeaknessCount === weaknesses.length &&
-    correctResistanceCount === resistances.length;
-
-  const correctAnswer =
-    `Weaknesses: ${weaknesses.map(titleCase).join(", ") || "None"}. ` +
-    `Resistances and immunities: ${
-      resistances.map(titleCase).join(", ") || "None"
-    }.`;
-
-  if (allCorrect) {
-    return {
-      points: 2,
-      message: "Perfect! You identified every weakness and resistance correctly.",
-      correctAnswer,
-       
-    };
-  }
-
-  if (correctWeaknessCount > 0 && correctResistanceCount > 0) {
-    return {
-      points: 1,
-      message: "Nice! You identified at least one weakness and one resistance.",
-      correctAnswer,
-       
-    };
-  }
-
-  return {
-    points: 0,
-    message: "You need at least one correct weakness and one correct resistance.",
-    correctAnswer,
-     
-  };
-}
-
-function getEvolutionData(
-  pokemon: PokemonData,
-  allPokemon: PokemonData[],
-): { description: string; method: string } | null {
-  // Evolution details are loaded asynchronously elsewhere.
-  // This function is intentionally not used for network requests.
-  void pokemon;
-  void allPokemon;
-  return null;
-}
-
 export default function GameScreen({ onHome }: GameScreenProps) {
   const [allPokemon, setAllPokemon] = useState<PokemonData[]>([]);
   const [team, setTeam] = useState<PokemonData[]>([]);
@@ -461,7 +548,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
   const [activeAbilityInput, setActiveAbilityInput] = useState<number | null>(null);
   const [validPokemonSelection, setValidPokemonSelection] = useState(false);
   const [validAbilitySelections, setValidAbilitySelections] = useState<boolean[]>([]);
-  const [evolutionAnswer, setEvolutionAnswer] = useState<EvolutionAnswer | null>(null);
 
   const currentPokemon = team[turn];
   const gameOver = !loading && !error && team.length === 6 && turn >= 6;
@@ -623,7 +709,7 @@ export default function GameScreen({ onHome }: GameScreenProps) {
 
         try {
           if (!currentPokemon.evolutionChainUrl) {
-            setExtraInfo({});
+            setExtraInfo({ evolutionTransitions: [] });
             return;
           }
 
@@ -633,51 +719,11 @@ export default function GameScreen({ onHome }: GameScreenProps) {
 
           if (cancelled) return;
 
-          const nodes = collectEvolutionNodes(data.chain);
-          const currentName = currentPokemon.name.toLowerCase();
-
-          const currentNode = nodes.find(
-            (node) => node.species.name === currentName,
+          const evolutionTransitions = collectEvolutionTransitions(
+            data.chain,
           );
 
-          if (!currentNode) {
-            setExtraInfo({});
-            return;
-          }
-
-          const nextEvolution = currentNode.evolves_to[0];
-
-          if (nextEvolution?.evolution_details[0]) {
-            const detail = nextEvolution.evolution_details[0];
-            const description = describeEvolution(detail);
-
-            setExtraInfo({
-              evolutionDescription: description,
-              evolutionMethod: detail.trigger.name,
-            });
-            return;
-          }
-
-          const previousNode = nodes.find((node) =>
-            node.evolves_to.some(
-              (child) => child.species.name === currentName,
-            ),
-          );
-
-          const previousDetail = previousNode?.evolves_to
-            .find((child) => child.species.name === currentName)
-            ?.evolution_details[0];
-
-          if (previousDetail) {
-            const description = describeEvolution(previousDetail);
-
-            setExtraInfo({
-              evolutionDescription: description,
-              evolutionMethod: previousDetail.trigger.name,
-            });
-          } else {
-            setExtraInfo({});
-          }
+          setExtraInfo({ evolutionTransitions });
         } catch {
           if (!cancelled) {
             setError("Couldn't load evolution data. Please try again.");
@@ -687,7 +733,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
         }
       }
     }
-
     void loadCategoryData();
 
     return () => {
@@ -703,7 +748,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
     setResult(null);
     setPokemonSearch("");
     setShowPokemonSuggestions(false);
-    setEvolutionAnswer(null);
   }
 
   function checkAnswer(answerToCheck: string = answer): ValidationResult {
@@ -791,8 +835,12 @@ export default function GameScreen({ onHome }: GameScreenProps) {
         };
       }
 
-      case "Evolution Method":
-        return validateEvolutionAnswer(answer, extraInfo);
+        case "Evolution Method":
+          return {
+            points: 0,
+            message: "Submit your structured evolution answer.",
+            correctAnswer: "",
+          };
 
       default:
         return {
@@ -822,7 +870,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
     setExtraInfo({});
     setValidPokemonSelection(false);
     setValidAbilitySelections([]);
-    setEvolutionAnswer(null);
   }
 
   function restartGame() {
@@ -835,7 +882,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
     setResult(null);
     setExtraInfo({});
     setError("");
-    setEvolutionAnswer(null);
   }
 
   if (loading) {
@@ -900,14 +946,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
   }
 
   if (!currentPokemon) return null;
-
-  const bst = getBaseStatTotal(currentPokemon);
-  const highestStat = Math.max(...Object.values(currentPokemon.stats));
-  const highestStatNames = (
-    Object.entries(currentPokemon.stats) as [PokemonStatName, number][]
-  )
-    .filter(([, value]) => value === highestStat)
-    .map(([name]) => name.replace(/-/g, " "));
 
   return (
     <main className="game-page">
@@ -1040,14 +1078,50 @@ export default function GameScreen({ onHome }: GameScreenProps) {
                       }}
                     />
                 ) : selectedCategory === "Evolution Method" ? (
-                <EvolutionMethodAnswer
+                  <EvolutionMethodAnswer
+                    key={`${currentPokemon.id}-${turn}`}
+                    disabled={loadingExtra || result !== null}
+                    onSubmit={(submittedAnswer) => {
+
+                      const validation = validateStructuredEvolutionAnswer(
+                        submittedAnswer,
+                        extraInfo.evolutionTransitions ?? [],
+                        currentPokemon.name,
+                      );
+
+                      setResult(validation);
+                      setScore((previous) => previous + validation.points);
+                      setUsedCategories((previous) =>
+                        previous.includes("Evolution Method")
+                          ? previous
+                          : [...previous, "Evolution Method"],
+                      );
+                    }}
+                  />
+
+              ) : selectedCategory === "Highest Stat" ? (
+                <HighestStatAnswer
                   key={`${currentPokemon.id}-${turn}`}
-                  disabled={loadingExtra || result !== null}
-                  onSubmit={(submittedAnswer) => {
-                    setEvolutionAnswer(submittedAnswer);
+                  pokemon={currentPokemon}
+                  onSubmit={(statAnswer) => {
+                    if (!selectedCategory || result) return;
+
+                    const validation = validateHighestStat(
+                      currentPokemon,
+                      statAnswer,
+                    );
+
+                    setAnswer(statAnswer);
+                    setResult(validation);
+                    setScore((previous) => previous + validation.points);
+                    setUsedCategories((previous) =>
+                      previous.includes("Highest Stat")
+                        ? previous
+                        : [...previous, "Highest Stat"],
+                    );
                   }}
                 />
-                ) : (
+              ) : (
                 <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -1229,7 +1303,7 @@ export default function GameScreen({ onHome }: GameScreenProps) {
                     id="pokemon-answer"
                     value={answer}
                     onChange={(event) => setAnswer(event.target.value)}
-                    placeholder={`Your answer for ${selectedCategory.toLowerCase()}...`}
+                    placeholder={`Your answer for ${String(selectedCategory).toLowerCase()}...`}
                     autoFocus
                     required
                 />

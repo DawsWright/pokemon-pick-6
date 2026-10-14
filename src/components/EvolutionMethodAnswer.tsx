@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type EvolutionDirection =
   | "evolves-into"
@@ -30,6 +30,8 @@ export type EvolutionAnswer = {
 
 type Props = {
   disabled?: boolean;
+  canEvolveInto: boolean;
+  canEvolveFrom: boolean;
   onSubmit: (answer: EvolutionAnswer) => void;
 };
 
@@ -111,10 +113,20 @@ const GAMES = [
 
 export default function EvolutionMethodAnswer({
   disabled = false,
+  canEvolveInto,
+  canEvolveFrom,
   onSubmit,
 }: Props) {
-  const [direction, setDirection] =
-    useState<EvolutionDirection>("evolves-into");
+  const [direction, setDirection] = useState<EvolutionDirection>(
+    canEvolveInto ? "evolves-into" : "evolves-from",
+  );
+  useEffect(() => {
+  if (direction === "evolves-into" && !canEvolveInto) {
+    setDirection("evolves-from");
+  } else if (direction === "evolves-from" && !canEvolveFrom) {
+    setDirection("evolves-into");
+  }
+}, [canEvolveInto, canEvolveFrom, direction]);
   const [method, setMethod] =
     useState<EvolutionMethod | "">("");
 
@@ -195,7 +207,11 @@ export default function EvolutionMethodAnswer({
         Number(level) >= 0 &&
         Number(level) <= 99)) &&
     (method !== "level-up-condition" ||
-      Boolean(conditionType && conditionDetail)) &&
+    (Boolean(conditionType) &&
+      (conditionType === "friendship" ||
+      conditionType === "walk-steps"
+        ? true
+        : Boolean(conditionDetail)))) &&
     (method !== "evolution-item" || Boolean(item)) &&
     (method !== "trade" ||
       tradeWith === "nothing" ||
@@ -214,27 +230,31 @@ export default function EvolutionMethodAnswer({
       <fieldset disabled={disabled}>
         <legend>Evolution direction</legend>
 
-        <div className="evolution-choice-row">
-          <label>
-            <input
-              type="radio"
-              name="evolution-direction"
-              checked={direction === "evolves-into"}
-              onChange={() => setDirection("evolves-into")}
-            />
-            Evolves into
-          </label>
+          <div className="evolution-choice-row">
+            {canEvolveInto && (
+              <label>
+                <input
+                  type="radio"
+                  name="evolution-direction"
+                  checked={direction === "evolves-into"}
+                  onChange={() => setDirection("evolves-into")}
+                />
+                Evolves into
+              </label>
+            )}
 
-          <label>
-            <input
-              type="radio"
-              name="evolution-direction"
-              checked={direction === "evolves-from"}
-              onChange={() => setDirection("evolves-from")}
-            />
-            Evolves from
-          </label>
-        </div>
+            {canEvolveFrom && (
+              <label>
+                <input
+                  type="radio"
+                  name="evolution-direction"
+                  checked={direction === "evolves-from"}
+                  onChange={() => setDirection("evolves-from")}
+                />
+                Evolves from
+              </label>
+            )}
+          </div>
 
         <label htmlFor="evolution-method">Evolution method</label>
         <select

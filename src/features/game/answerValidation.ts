@@ -65,7 +65,7 @@ export function validateTyping(
   if (matches > 0) {
     return {
       points: 1,
-      message: "Good! You identified at least one type.",
+      message: "Nice! You identified at least one type.",
       correctAnswer,
        
     };
@@ -119,6 +119,7 @@ export function validateAbilities(
   };
 }
 
+
 export function validateHighestStat(
   pokemon: PokemonData,
   answer: string,
@@ -131,33 +132,42 @@ export function validateHighestStat(
     .filter(([, value]) => value === maxStat)
     .map(([stat]) => stat);
 
-  const guesses = new Set(parseList(answer));
-  const normalizedLabels = highestStats.map(normalize);
-  const hasCorrectStat = normalizedLabels.some((stat, index) => {
-    const label = normalize(STAT_LABELS[highestStats[index]]);
-    return guesses.has(stat) || guesses.has(label);
-  });
+  const guesses = parseList(answer);
 
-  const includesExactValue = guesses.has(String(maxStat));
+  const guessedStat = guesses.find((guess) =>
+    Object.entries(STAT_LABELS).some(
+      ([key, label]) =>
+        normalize(key) === guess || normalize(label) === guess,
+    ),
+  );
+
+  const guessedValue = guesses.find((guess) => /^\d+$/.test(guess));
+
+  const isCorrectStat = highestStats.some(
+    (stat) =>
+      normalize(stat) === guessedStat ||
+      normalize(STAT_LABELS[stat]) === guessedStat,
+  );
+
+  const hasCorrectValue = guessedValue === String(maxStat);
+
   const correctAnswer = highestStats
     .map((stat) => `${STAT_LABELS[stat]} (${maxStat})`)
     .join(", ");
 
-  if (hasCorrectStat && includesExactValue) {
+  if (isCorrectStat && hasCorrectValue) {
     return {
       points: 2,
-      message: "Perfect! Correct stat and exact value.",
+      message: "Perfect! You identified a highest stat and its correct value.",
       correctAnswer,
-       
     };
   }
 
-  if (hasCorrectStat) {
+  if (isCorrectStat) {
     return {
       points: 1,
-      message: "Good! You identified a highest stat.",
+      message: "Nice! You identified a highest stat, but its value was incorrect.",
       correctAnswer,
-       
     };
   }
 
@@ -165,9 +175,9 @@ export function validateHighestStat(
     points: 0,
     message: "That isn't one of its highest stats.",
     correctAnswer,
-     
   };
 }
+
 
 export function validateRegion(
   pokemon: PokemonData,
@@ -212,7 +222,7 @@ export function validateRegion(
   if (regionCorrect) {
     return {
       points: 1,
-      message: "Good! You identified the correct region, but not the professor.",
+      message: "Nice! You identified the correct region, but not the professor.",
       correctAnswer: `${pokemon.region} — ${correctProfessor}`,
        
     };
