@@ -22,10 +22,17 @@ const categoryRules = [
   },
   {
     name: "Weaknesses",
-    description: "Identify the Pokémon's type weaknesses and resistances (ignoring abilities).",
-    partial: "You name at least one correct weakness and one correct resistance.",
-    perfect: "You correctly name all weaknesses and resistances.",
-    example: "For Squirtle, naming Weakness = Grass and Resistance = Fire, Water grants 1 point. Naming Weakness = Grass, Electric and Resistance = Fire, Water, Steel, Ice grants 2 points. Immunities are considered resistances, and abilities are not considered. So Eelektross would have a weakness to Ground, despite having the ability Levitate.",
+    description: "Identify the Pokémon's type weaknesses (ignoring abilities).",
+    partial: "You name at least one correct weakness.",
+    perfect: "You correctly name all weaknesses.",
+    example: "For Pidgey, naming Weakness = Ice grants 1 point. Naming Weakness = Ice, Electric, Rock grants 2 points. Abilities are not considered, so a Pokémon with the ability Levitate could still be weak to Ground, for example.",
+  },
+  {
+    name: "Resistances",
+    description: "Identify the Pokémon's type resistances and immunities (ignoring abilities).",
+    partial: "You name at least one correct resistance.",
+    perfect: "You correctly name all resistances.",
+    example: "For Squirtle, naming Resistance = Fire, Water grants 1 point. Naming Resistance = Fire, Water, Steel, Ice grants 2 points. Abilities are not considered, so a Pokémon with the ability Levitate could still be weak to Ground, for example.",
   },
   {
     name: "Type Match",
@@ -55,13 +62,6 @@ const categoryRules = [
     perfect: "You name the exact method, including the required level, item, move, or condition when applicable.",
     example: "For Magmar -> Magmortar, guessing Trade gives 1 point. Guessing Trade with Item - Magmarizer gives 2 points. For level-up evolutions, the exact level must be named for 2 points. If it has no evolution line, or is a Mega Pokémon, this category cannot be selected for that Pokémon!"
   },
-  {
-    name: "Base Stat Total",
-    description: "Guess the Pokémon's Base Stat Total (BST), the sum of its six base stats.",
-    partial: "Your guess is within 10 points of the actual BST.",
-    perfect: "Your guess exactly matches the actual BST.",
-    example: "If the BST is 525, guessing 520 earns 1 point. Guessing 525 earns 2 points.",
-  },
 
 ];
 
@@ -74,10 +74,15 @@ function App() {
   return (
     <div className="app">
       <header className="navbar">
-        <a className="brand" href="#" aria-label="Pokémon Pick 6 home">
+        <button
+          className="brand"
+          type="button"
+          onClick={() => setGameStarted(false)}
+          aria-label="Pokémon Pick 6 home"
+        >
           <span className="pokeball" aria-hidden="true" />
           <span>Pokémon Pick 6</span>
-        </a>
+        </button>
       </header>
 {gameStarted ? (
   <GameScreen onHome={() => setGameStarted(false)} />
@@ -114,8 +119,8 @@ function App() {
                 <li>
                   <span className="rule-icon blue">4</span>
                   <span>
-                  Some answers are <span className="good-text">Good</span>, and some are{" "}
-                  <span className="perfect-text">Perfect</span>. Get all <span className="good-text">Good</span> answers and
+                  Some answers are <span className="good-text">Correct</span>, and some are{" "}
+                  <span className="perfect-text">Perfect</span>. Get all <span className="good-text">Correct</span> answers and
                   you win the challenge, but get all <span className="perfect-text">Perfect</span> answers for a{" "}
                   <span className="mastery-text">Mastery</span>!
                 </span>
@@ -187,12 +192,12 @@ function App() {
                 </p>
 
                 <div className="rule-section partial-rule">
-                  <h3>1 Point — Good Answer</h3>
+                  <h3>Correct Answer</h3>
                   <p>{selectedCategory.partial}</p>
                 </div>
 
                 <div className="rule-section perfect-rule">
-                  <h3>2 Points — Perfect Answer</h3>
+                  <h3>Perfect Answer</h3>
                   <p>{selectedCategory.perfect}</p>
                 </div>
 

@@ -54,8 +54,8 @@ export default function TypingAnswer({
   return (
     <form className="typing-answer" onSubmit={handleSubmit}>
       <p className="game-muted">
-        Choose one primary type and one secondary type.
-        Select None if the Pokémon has only one type.
+        Choose one type from each column (order does not matter).
+        Select None in the second column if the Pokémon has only one type.
       </p>
 
       <div className="typing-columns">

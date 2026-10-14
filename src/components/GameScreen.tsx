@@ -10,33 +10,36 @@ import {
   type PokemonStatName,
 } from "../data/pokeApi";
 import {
-  validateBST,
   validateTyping,
   validateAbilities,
   validateHighestStat,
   validateRegion,
   type ValidationResult,
 } from "../features/game/answerValidation";
+import EvolutionMethodAnswer, {
+  type EvolutionAnswer,
+} from "./EvolutionMethodAnswer";
+
 
 type Category =
   | "Typing"
   | "Region"
   | "Weaknesses"
+  | "Resistances"
   | "Type Match"
   | "Highest Stat"
   | "Abilities"
-  | "Evolution Method"
-  | "Base Stat Total";
+  | "Evolution Method";
 
 const CATEGORIES: Category[] = [
   "Typing",
   "Region",
   "Weaknesses",
+  "Resistances",
   "Type Match",
   "Highest Stat",
   "Abilities",
   "Evolution Method",
-  "Base Stat Total",
 ];
 
 const PROFESSORS: Record<string, string> = {
@@ -203,6 +206,7 @@ function validateEvolutionAnswer(
       points: 0,
       message: "This Pokémon has no applicable evolution for this category.",
       correctAnswer: "Not applicable",
+       
     };
   }
 
@@ -232,14 +236,16 @@ function validateEvolutionAnswer(
       points: 2,
       message: "Perfect! You identified the exact evolution condition.",
       correctAnswer: extra.evolutionDescription!,
+       
     };
   }
 
   if (hasGeneralMethod) {
     return {
       points: 1,
-      message: "Good! You identified the general evolution method.",
+      message: "Nice! You identified the general evolution method.",
       correctAnswer: extra.evolutionDescription!,
+       
     };
   }
 
@@ -247,6 +253,7 @@ function validateEvolutionAnswer(
     points: 0,
     message: "That evolution method was not correct.",
     correctAnswer: extra.evolutionDescription!,
+     
   };
 }
 
@@ -256,27 +263,59 @@ function validateTypeMatch(
   allPokemon: PokemonData[],
 ): ValidationResult {
   const guess = normalize(answer);
-  const match = allPokemon.find(
-    (candidate) => normalize(candidate.name) === guess,
-  );
 
   const exactTypes = pokemon.types.map(normalize).sort().join(",");
+  
+  const actualTyping = pokemon.types.map(titleCase).join(" / ");
+
   const matchingPokemon = allPokemon.filter(
     (candidate) =>
       candidate.id !== pokemon.id &&
       candidate.types.map(normalize).sort().join(",") === exactTypes,
   );
 
+
+  if (guess === "unique") {
+    if (matchingPokemon.length === 0) {
+      return {
+        points: 2,
+        message: "Perfect! No other Pokémon shares this exact typing.",
+        correctAnswer: `${formatPokemonName(pokemon.name)} (${actualTyping})`,
+        guessedAnswer: "Unique",
+      };
+    }
+
+    return {
+      points: 0,
+      message: "This Pokémon shares its exact typing with other Pokémon.",
+      correctAnswer: `${formatPokemonName(pokemon.name)} (${actualTyping}) —  ${
+        matchingPokemon
+          .slice(0, 1)
+          .map((p) => formatPokemonName(p.name))
+          .join(", ")
+      } shares this typing.`,
+      guessedAnswer: "Unique",
+    };
+  }
+
+  const match = allPokemon.find(
+    (candidate) => normalize(candidate.name) === guess,
+  );
+
   if (!match || match.id === pokemon.id) {
     return {
       points: 0,
-      message: "Enter the name of a different Pokémon.",
+      message: "Enter the name of a different Pokémon, or answer 'unique' if its typing is unique.",
       correctAnswer:
         matchingPokemon.length > 0
-          ? matchingPokemon.slice(0, 5).map((p) => formatPokemonName(p.name)).join(", ")
+          ? matchingPokemon
+              .slice(0, 5)
+              .map((p) => formatPokemonName(p.name))
+              .join(", ")
           : "Unique Typing",
     };
   }
+
 
   const sharedType = match.types.some((type) =>
     pokemon.types.map(normalize).includes(normalize(type)),
@@ -285,29 +324,33 @@ function validateTypeMatch(
   const sameCombination =
     match.types.map(normalize).sort().join(",") === exactTypes;
 
+  const guessedTyping = match.types.map(titleCase).join(" / ");
+
   if (sameCombination) {
     return {
       points: 2,
-      message: "Perfect! That Pokémon has the exact same typing.",
-      correctAnswer: `${formatPokemonName(match.name)} (${match.types.map(titleCase).join(" / ")})`,
+      message: "Perfect! You guessed the exact same typing.",
+      correctAnswer: `${formatPokemonName(pokemon.name)} (${actualTyping})`,
+      guessedAnswer: `${formatPokemonName(match.name)} (${guessedTyping})`,
     };
   }
 
   if (sharedType) {
     return {
       points: 1,
-      message: "Good! That Pokémon shares at least one type.",
-      correctAnswer: `${formatPokemonName(match.name)} (${match.types.map(titleCase).join(" / ")})`,
+      message: "Nice! Your guess shares at least one type.",
+      correctAnswer: `${formatPokemonName(pokemon.name)} (${actualTyping})`,
+      guessedAnswer: `${formatPokemonName(match.name)} (${guessedTyping})`,
     };
   }
 
   return {
     points: 0,
     message: "That Pokémon doesn't share a type.",
-    correctAnswer: `A Pokémon sharing ${pokemon.types.map(titleCase).join(" / ")}`,
+    correctAnswer: `${formatPokemonName(pokemon.name)} (${actualTyping})`,
+    guessedAnswer: `${formatPokemonName(match.name)} (${guessedTyping})`,
   };
 }
-
 
 function validateWeaknesses(
   answer: string,
@@ -367,14 +410,16 @@ function validateWeaknesses(
       points: 2,
       message: "Perfect! You identified every weakness and resistance correctly.",
       correctAnswer,
+       
     };
   }
 
   if (correctWeaknessCount > 0 && correctResistanceCount > 0) {
     return {
       points: 1,
-      message: "Good! You identified at least one weakness and one resistance.",
+      message: "Nice! You identified at least one weakness and one resistance.",
       correctAnswer,
+       
     };
   }
 
@@ -382,6 +427,7 @@ function validateWeaknesses(
     points: 0,
     message: "You need at least one correct weakness and one correct resistance.",
     correctAnswer,
+     
   };
 }
 
@@ -413,6 +459,9 @@ export default function GameScreen({ onHome }: GameScreenProps) {
   const [showPokemonSuggestions, setShowPokemonSuggestions] = useState(false);
   const [abilityAnswers, setAbilityAnswers] = useState<string[]>([]);
   const [activeAbilityInput, setActiveAbilityInput] = useState<number | null>(null);
+  const [validPokemonSelection, setValidPokemonSelection] = useState(false);
+  const [validAbilitySelections, setValidAbilitySelections] = useState<boolean[]>([]);
+  const [evolutionAnswer, setEvolutionAnswer] = useState<EvolutionAnswer | null>(null);
 
   const currentPokemon = team[turn];
   const gameOver = !loading && !error && team.length === 6 && turn >= 6;
@@ -484,7 +533,10 @@ export default function GameScreen({ onHome }: GameScreenProps) {
       setExtraInfo({});
       setLoadingExtra(false);
 
-      if (selectedCategory === "Weaknesses") {
+      if (
+          selectedCategory === "Weaknesses" ||
+          selectedCategory === "Resistances"
+        ) {
         setLoadingExtra(true);
 
         try {
@@ -651,20 +703,20 @@ export default function GameScreen({ onHome }: GameScreenProps) {
     setResult(null);
     setPokemonSearch("");
     setShowPokemonSuggestions(false);
+    setEvolutionAnswer(null);
   }
 
-  function checkAnswer(): ValidationResult {
+  function checkAnswer(answerToCheck: string = answer): ValidationResult {
     if (!currentPokemon || !selectedCategory) {
       return {
         points: 0,
         message: "Select a category first.",
         correctAnswer: "",
+         
       };
     }
 
     switch (selectedCategory) {
-      case "Base Stat Total":
-        return validateBST(currentPokemon, answer);
 
       case "Typing":
         return validateTyping(currentPokemon, answer);
@@ -682,7 +734,62 @@ export default function GameScreen({ onHome }: GameScreenProps) {
         return validateTypeMatch(currentPokemon, answer, allPokemon);
 
       case "Weaknesses":
-        return validateWeaknesses(answer, extraInfo);
+      case "Resistances": {
+        const isWeaknesses = selectedCategory === "Weaknesses";
+
+        const expectedTypes = (
+          isWeaknesses
+            ? extraInfo.weaknesses
+            : extraInfo.resistances
+        ) ?? [];
+
+        const guessedTypes = parseAnswers(answerToCheck);
+        const expected = expectedTypes.map(normalize);
+
+        const correctCount = new Set(guessedTypes).size > 0
+          ? [...new Set(guessedTypes)].filter((type) =>
+              expected.includes(type)
+            ).length
+          : 0;
+
+        const hasIncorrect = guessedTypes.some(
+          (type) => !expected.includes(type)
+        );
+
+        const allCorrect =
+          !hasIncorrect &&
+          correctCount === expected.length &&
+          new Set(guessedTypes).size === expected.length;
+
+        const points = allCorrect
+          ? 2
+          : correctCount > 0
+            ? 1
+            : 0;
+
+        return {
+          points,
+          message: allCorrect
+            ? `Perfect! You identified every ${
+                isWeaknesses
+                  ? "weakness"
+                  : "resistance and immunity"
+              } correctly.`
+            : points === 1
+              ? `Nice! You identified some ${
+                  isWeaknesses
+                    ? "weaknesses"
+                    : "resistances and immunities"
+                } correctly.`
+              : `You did not identify the ${
+                  isWeaknesses
+                    ? "weaknesses"
+                    : "resistances and immunities"
+                } correctly.`,
+          correctAnswer: expectedTypes.map(titleCase).join(", ") || "None",
+           
+        };
+      }
 
       case "Evolution Method":
         return validateEvolutionAnswer(answer, extraInfo);
@@ -692,6 +799,7 @@ export default function GameScreen({ onHome }: GameScreenProps) {
           points: 0,
           message: "This category isn't supported yet.",
           correctAnswer: "",
+           
         };
     }
   }
@@ -712,6 +820,9 @@ export default function GameScreen({ onHome }: GameScreenProps) {
     setAnswer("");
     setResult(null);
     setExtraInfo({});
+    setValidPokemonSelection(false);
+    setValidAbilitySelections([]);
+    setEvolutionAnswer(null);
   }
 
   function restartGame() {
@@ -724,6 +835,7 @@ export default function GameScreen({ onHome }: GameScreenProps) {
     setResult(null);
     setExtraInfo({});
     setError("");
+    setEvolutionAnswer(null);
   }
 
   if (loading) {
@@ -732,7 +844,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
         <section className="game-results">
           <p className="game-eyebrow">LOADING POKÉMON</p>
           <h1>Preparing your challenge...</h1>
-          <p>Fetching Pokémon data from PokéAPI.</p>
         </section>
       </main>
     );
@@ -818,23 +929,16 @@ export default function GameScreen({ onHome }: GameScreenProps) {
           </div>
 
           <p className="turn-label">TURN {turn + 1} OF 6</p>
-          <p className="score-label">SCORE: {score} / 12</p>
         </div>
 
         <section className="pokemon-panel">
-          <p className="game-eyebrow">YOUR NEXT POKÉMON</p>
+          <p className="game-eyebrow">YOUR POKÉMON</p>
 
           <div className="pokemon-art">
             <img src={currentPokemon.sprite} alt={currentPokemon.name} />
           </div>
 
           <h1>{formatPokemonName(currentPokemon.name)}</h1>
-
-
-
-          <p className="game-muted">
-            Choose one category to answer. Each category can only be used once.
-          </p>
         </section>
 
         <section className="game-category-section">
@@ -866,7 +970,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
 
         {selectedCategory && (
           <section className="answer-panel">
-            <p className="game-eyebrow">YOUR ANSWER</p>
             <h2>{selectedCategory}</h2>
             
         {!result ? (
@@ -911,151 +1014,217 @@ export default function GameScreen({ onHome }: GameScreenProps) {
                 ]);
             }}
             />
-        ) : selectedCategory === "Weaknesses" ? (
-            <WeaknessesAnswer
-            disabled={loadingExtra}
-            onSubmit={(weaknessesAnswer) => {
-                if (!selectedCategory || result || loadingExtra) return;
+        ) : selectedCategory === "Weaknesses" ||
+                  selectedCategory === "Resistances" ? (
+                    <WeaknessesAnswer
+                      key={selectedCategory}
+                      category={selectedCategory}
+                      disabled={loadingExtra}
+                      selectionLimit={
+                        selectedCategory === "Weaknesses"
+                          ? (extraInfo.weaknesses?.length ?? 0)
+                          : (extraInfo.resistances?.length ?? 0)
+                      }
+                      onSubmit={(typeAnswer) => {
+                        if (!selectedCategory || result || loadingExtra) return;
 
-                const validation = validateWeaknesses(
-                weaknessesAnswer,
-                extraInfo,
-                );
+                        const validation = checkAnswer(typeAnswer);
 
-                setAnswer(weaknessesAnswer);
-                setResult(validation);
-                setScore((previous) => previous + validation.points);
-                setUsedCategories((previous) => [
-                ...previous,
-                selectedCategory,
-                ]);
-            }}
-            />
-        ) : (
+                        setAnswer(typeAnswer);
+                        setResult(validation);
+                        setScore((previous) => previous + validation.points);
+                        setUsedCategories((previous) => [
+                          ...previous,
+                          selectedCategory,
+                        ]);
+                      }}
+                    />
+                ) : selectedCategory === "Evolution Method" ? (
+                <EvolutionMethodAnswer
+                  key={`${currentPokemon.id}-${turn}`}
+                  disabled={loadingExtra || result !== null}
+                  onSubmit={(submittedAnswer) => {
+                    setEvolutionAnswer(submittedAnswer);
+                  }}
+                />
+                ) : (
                 <form
                 onSubmit={(event) => {
-                    event.preventDefault();
-                    submitAnswer();
+                  event.preventDefault();
+
+                  if (
+                    selectedCategory === "Type Match" &&
+                    !validPokemonSelection
+                  ) {
+                    return;
+                  }
+
+                  if (
+                    selectedCategory === "Abilities" &&
+                    abilityAnswers.some(
+                      (ability, index) =>
+                        ability.trim() !== "" && !validAbilitySelections[index]
+                    )
+                  ) {
+                    return;
+                  }
+
+                  submitAnswer();
                 }}
                 >
-                <label htmlFor="pokemon-answer">Enter a Pokémon of the same type.</label>
-
+                <label>
+                {selectedCategory === "Type Match"
+                  ? 'Enter a Pokémon with the same typing, or answer "Unique" if it does not share its typing with any Pokémon.'
+                  : selectedCategory === "Abilities"
+                    ? "Enter the Pokémon's abilities."
+                    : "Enter your answer."}
+                </label>
 
                 {selectedCategory === "Abilities" ? (
-                <div className="ability-inputs">
+                  <div className="ability-inputs">
                     {currentPokemon.abilities.map((_, index) => {
-                    const search = abilityAnswers[index] ?? "";
-                    const filteredAbilities = getFilteredAbilities(search);
+                      const search = abilityAnswers[index] ?? "";
+                      const filteredAbilities = getFilteredAbilities(search);
 
-                    return (
+                      return (
                         <div className="pokemon-autocomplete" key={index}>
-                        <label htmlFor={`ability-answer-${index}`}>
+                          <label htmlFor={`ability-answer-${index}`}>
                             Ability {index + 1}
-                        </label>
+                          </label>
 
-                        <input
+                          <input
                             id={`ability-answer-${index}`}
                             value={search}
                             onChange={(event) => {
-                            const value = event.target.value;
+                              const value = event.target.value;
 
-                            setAbilityAnswers((previous) => {
+                              setAbilityAnswers((previous) => {
                                 const updated = [...previous];
                                 updated[index] = value;
                                 setAnswer(updated.join(", "));
                                 return updated;
-                            });
+                              });
 
-                            setActiveAbilityInput(index);
+                              setValidAbilitySelections((previous) => {
+                                const updated = [...previous];
+                                updated[index] = false;
+                                return updated;
+                              });
+
+                              setActiveAbilityInput(index);
                             }}
                             onFocus={() => setActiveAbilityInput(index)}
                             onBlur={() => {
-                            window.setTimeout(() => {
+                              window.setTimeout(() => {
                                 setActiveAbilityInput((active) =>
-                                active === index ? null : active
+                                  active === index ? null : active
                                 );
-                            }, 150);
+                              }, 150);
                             }}
                             placeholder="Start typing an ability..."
                             autoComplete="off"
                             required
-                        />
+                          />
 
-                        {activeAbilityInput === index &&
+                          {activeAbilityInput === index &&
                             search.trim() !== "" &&
                             filteredAbilities.length > 0 && (
-                            <ul className="pokemon-suggestions">
+                              <ul className="pokemon-suggestions">
                                 {filteredAbilities.map((suggestion) => (
-                                <li key={suggestion}>
+                                  <li key={suggestion}>
                                     <button
-                                    type="button"
-                                    onMouseDown={(event) => event.preventDefault()}
-                                    onClick={() => {
+                                      type="button"
+                                      onMouseDown={(event) => event.preventDefault()}
+                                      onClick={() => {
                                         setAbilityAnswers((previous) => {
-                                        const updated = [...previous];
-                                        updated[index] = suggestion;
-                                        setAnswer(updated.join(", "));
-                                        return updated;
+                                          const updated = [...previous];
+                                          updated[index] = suggestion;
+                                          setAnswer(updated.join(", "));
+                                          return updated;
+                                        });
+
+                                        setValidAbilitySelections((previous) => {
+                                          const updated = [...previous];
+                                          updated[index] = true;
+                                          return updated;
                                         });
 
                                         setActiveAbilityInput(null);
-                                    }}
+                                      }}
                                     >
-                                    {formatPokemonName(suggestion)}
+                                      {formatPokemonName(suggestion)}
                                     </button>
-                                </li>
+                                  </li>
                                 ))}
-                            </ul>
+                              </ul>
                             )}
                         </div>
-                    );
+                      );
                     })}
-                </div>
+                  </div>
                 ) : selectedCategory === "Type Match" ? (
-                <div className="pokemon-autocomplete">
+                  <div className="pokemon-autocomplete">
                     <input
-                    id="pokemon-answer"
-                    value={pokemonSearch}
-                    onChange={(event) => {
+                      id="pokemon-answer"
+                      value={pokemonSearch}
+                      onChange={(event) => {
                         const value = event.target.value;
                         setPokemonSearch(value);
                         setAnswer(value);
+                        setValidPokemonSelection(false);
                         setShowPokemonSuggestions(true);
-                    }}
-                    onFocus={() => setShowPokemonSuggestions(true)}
-                    onBlur={() => {
+                      }}
+                      onFocus={() => setShowPokemonSuggestions(true)}
+                      onBlur={() => {
                         window.setTimeout(() => {
-                        setShowPokemonSuggestions(false);
+                          setShowPokemonSuggestions(false);
                         }, 150);
-                    }}
-                    placeholder="Start typing a Pokémon name..."
-                    autoComplete="off"
-                    required
+                      }}
+                      placeholder="Search Pokémon..."
+                      autoComplete="off"
+                      required
                     />
 
-                    {showPokemonSuggestions &&
-                    pokemonSearch.trim() !== "" &&
-                    filteredPokemon.length > 0 && (
-                        <ul className="pokemon-suggestions">
+                    {showPokemonSuggestions && pokemonSearch.trim() !== "" && (
+                      <ul className="pokemon-suggestions">
                         {filteredPokemon.map((pokemon) => (
-                            <li key={pokemon.id}>
+                          <li key={pokemon.id}>
                             <button
-                                type="button"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => {
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
                                 setPokemonSearch(pokemon.name);
                                 setAnswer(pokemon.name);
+                                setValidPokemonSelection(true);
                                 setShowPokemonSuggestions(false);
-                                }}
+                              }}
                             >
-                                {formatPokemonName(pokemon.name)}
+                              {formatPokemonName(pokemon.name)}
                             </button>
-                            </li>
+                          </li>
                         ))}
-                        </ul>
+
+                        {"unique typing".includes(pokemonSearch.trim().toLowerCase()) ||
+                        "unique".includes(pokemonSearch.trim().toLowerCase()) ? (
+                          <li>
+                            <button
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                setPokemonSearch("unique");
+                                setAnswer("unique");
+                                setValidPokemonSelection(true);
+                                setShowPokemonSuggestions(false);
+                              }}
+                            >
+                              Unique
+                            </button>
+                          </li>
+                        ) : null}
+                      </ul>
                     )}
-                </div>
-                ) : (
+                  </div>
+                ):(
                 <input
                     id="pokemon-answer"
                     value={answer}
@@ -1064,14 +1233,6 @@ export default function GameScreen({ onHome }: GameScreenProps) {
                     autoFocus
                     required
                 />
-                )}
-
-
-                {selectedCategory === "Evolution Method" && (
-                    <p className="game-muted">
-                    Name the general method for 1 point, or the exact condition
-                    for 2 points. If no evolution applies, choose another category.
-                    </p>
                 )}
 
                 {loadingExtra && (
@@ -1102,51 +1263,47 @@ export default function GameScreen({ onHome }: GameScreenProps) {
                 </form>
             )
             ) : (
+            <div className="grading-panel">
+              <p>
+                Your answer:{" "}
+                <strong
+                  className={
+                    result.points === 2
+                      ? "answer-perfect"
+                      : result.points === 1
+                        ? "answer-correct"
+                        : "answer-incorrect"
+                  }
+                >
+                  {answer}
+                </strong>
+              </p>
 
+              <p>{result.message}</p>
 
-              <div className="grading-panel">
-                <h3>
-                  {result.points === 2
-                    ? "Perfect!"
-                    : result.points === 1
-                      ? "Good!"
-                      : "Not quite!"}
-                </h3>
+              <p>
+                Answer: <strong>{result.correctAnswer}</strong>
+              </p>
 
+              {result.guessedAnswer && (
                 <p>
-                  Your answer: <strong>{answer}</strong>
+                  Your guess: <strong>{result.guessedAnswer}</strong>
                 </p>
-                <p>{result.message}</p>
-                <p>
-                  Correct answer: <strong>{result.correctAnswer}</strong>
-                </p>
-                <p>
-                  Points earned: <strong>{result.points} / 2</strong>
-                </p>
+              )}
 
-                <div className="game-actions">
-                  <button
-                    className="game-primary-button"
-                    onClick={nextTurn}
-                  >
-                    {turn === 5 ? "View Results" : "Next Pokémon"}
-                  </button>
-                </div>
+              <p>
+                Points earned: <strong>{result.points} / 2</strong>
+              </p>
+
+              <div className="game-actions">
+                <button className="game-primary-button" onClick={nextTurn}>
+                  {turn === 5 ? "View Results" : "Next Pokémon"}
+                </button>
               </div>
+            </div>
             )}
           </section>
         )}
-
-        <section className="pokemon-panel">
-          <details>
-            <summary>Pokémon stats (testing)</summary>
-            <p>Base Stat Total: {bst}</p>
-            <p>
-              Highest stat: {highestStatNames.join(", ")} ({highestStat})
-            </p>
-            <p>Region: {currentPokemon.region}</p>
-          </details>
-        </section>
       </section>
     </main>
   );

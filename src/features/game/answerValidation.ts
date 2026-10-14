@@ -1,9 +1,5 @@
-
-import {
-  getBaseStatTotal,
-  type PokemonData,
-  type PokemonStatName,
-} from "../../data/pokeAPI";
+import type { ReactNode } from "react";
+import type { PokemonData, PokemonStatName } from "../../data/pokeApi";
 
 export type Category =
   | "Base Stat Total"
@@ -16,6 +12,7 @@ export type Category =
   | "Weaknesses";
 
 export type ValidationResult = {
+  guessedAnswer?: ReactNode;
   points: 0 | 1 | 2;
   message: string;
   correctAnswer: string;
@@ -44,44 +41,6 @@ const STAT_LABELS: Record<PokemonStatName, string> = {
   speed: "Speed",
 };
 
-export function validateBST(
-  pokemon: PokemonData,
-  answer: string,
-): ValidationResult {
-  const guess = Number(answer.trim());
-  const actual = getBaseStatTotal(pokemon);
-
-  if (!answer.trim() || !Number.isFinite(guess)) {
-    return {
-      points: 0,
-      message: "Enter a valid number.",
-      correctAnswer: String(actual),
-    };
-  }
-
-  if (guess === actual) {
-    return {
-      points: 2,
-      message: "Perfect! Exact Base Stat Total.",
-      correctAnswer: String(actual),
-    };
-  }
-
-  if (Math.abs(guess - actual) <= 10) {
-    return {
-      points: 1,
-      message: "Good! You were within 10 points.",
-      correctAnswer: String(actual),
-    };
-  }
-
-  return {
-    points: 0,
-    message: "Not quite!",
-    correctAnswer: String(actual),
-  };
-}
-
 export function validateTyping(
   pokemon: PokemonData,
   answer: string,
@@ -99,6 +58,7 @@ export function validateTyping(
       points: 2,
       message: "Perfect! You identified every type.",
       correctAnswer,
+       
     };
   }
 
@@ -107,6 +67,7 @@ export function validateTyping(
       points: 1,
       message: "Good! You identified at least one type.",
       correctAnswer,
+       
     };
   }
 
@@ -114,6 +75,7 @@ export function validateTyping(
     points: 0,
     message: "Incorrect typing.",
     correctAnswer,
+     
   };
 }
 
@@ -134,23 +96,26 @@ export function validateAbilities(
   if (matches === actual.length && guesses.size === actual.length) {
     return {
       points: 2,
-      message: "Perfect! You named every listed ability.",
+      message: "Perfect! You named every ability.",
       correctAnswer,
+       
     };
   }
 
   if (matches > 0) {
     return {
       points: 1,
-      message: "Good! You named at least one ability.",
+      message: "Nice! You named at least one ability.",
       correctAnswer,
+       
     };
   }
 
   return {
     points: 0,
-    message: "None of those abilities matched.",
+    message: "None of those abilities are available to this Pokémon.",
     correctAnswer,
+     
   };
 }
 
@@ -183,6 +148,7 @@ export function validateHighestStat(
       points: 2,
       message: "Perfect! Correct stat and exact value.",
       correctAnswer,
+       
     };
   }
 
@@ -191,6 +157,7 @@ export function validateHighestStat(
       points: 1,
       message: "Good! You identified a highest stat.",
       correctAnswer,
+       
     };
   }
 
@@ -198,6 +165,7 @@ export function validateHighestStat(
     points: 0,
     message: "That isn't one of its highest stats.",
     correctAnswer,
+     
   };
 }
 
@@ -237,6 +205,7 @@ export function validateRegion(
       points: 2,
       message: "Perfect! You identified the correct region and professor.",
       correctAnswer: `${pokemon.region} — ${correctProfessor}`,
+       
     };
   }
 
@@ -245,6 +214,7 @@ export function validateRegion(
       points: 1,
       message: "Good! You identified the correct region, but not the professor.",
       correctAnswer: `${pokemon.region} — ${correctProfessor}`,
+       
     };
   }
 
@@ -252,5 +222,6 @@ export function validateRegion(
     points: 0,
     message: "That region was incorrect.",
     correctAnswer: `${pokemon.region} — ${correctProfessor}`,
+     
   };
 }

@@ -22,13 +22,16 @@
 }
 
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  color: #fff;
-  font-size: 1.25rem;
-  font-weight: 800;
+  gap: 0.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .pokeball,
@@ -830,7 +833,7 @@
 
 .game-category-button:hover:not(:disabled),
 .category-selected {
-  background: #302334;
+  background: #202d47;
   border-color: #168dd0;
 }
 
@@ -1386,4 +1389,62 @@
   background: rgb(128 128 128 / 20%);
   outline: none;
 }
+
+.grading-panel .answer-incorrect {
+  color: #ff465c !important;
+}
+
+.grading-panel .answer-correct {
+  color: #ffd166 !important;
+}
+
+.grading-panel .answer-perfect {
+  color: #4ade80 !important;
+}
+
+.evolution-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 12px;
+}
+
+.evolution-form legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.evolution-form label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.evolution-form select,
+.evolution-form input:not([type="checkbox"]):not([type="radio"]) {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #555);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.evolution-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.evolution-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
 
